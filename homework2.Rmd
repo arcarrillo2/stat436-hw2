@@ -1,0 +1,85 @@
+---
+title: "Homework 2"
+author: "Angelique Carrillo"
+date: "2024-10-21"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(shiny)
+library(DT)
+library(tidyverse)
+library(readr)
+```
+
+```{r}
+titanic_data <- read_csv("https://drive.google.com/uc?export=download&id=1jDDvXs2XBnAzF-zqyeeEl2yE3DNY3Wxo")
+```
+
+```{r}
+#user interface
+ui <- fluidPage(
+  titlePanel("Titanic Survival Analysis"), 
+  sidebarLayout(
+    sidebarPanel(
+      # Dropdown to select a Passenger Class (either 1st, 2nd, 3rd, or All Classes)
+      selectInput("pclass", "Select Passenger Class:", choices = c("All", unique(titanic_data$Pclass)), selected = "All"),
+      
+      # Slider to filter passengers by age range
+      sliderInput("age", "Select Age Range:", min = 0, max = 90, value = c(0,90)),
+    ),
+      mainPanel(
+        plotOutput("survivalPlot"), # Plot the Survivors based on Sex
+        plotOutput("agePlot"), # Plot age distribution of all passengers within the filters (survivors and non-survivors)
+        DTOutput("summaryTable") # Summary table of all passengers within the specified filters
+    )
+  )
+)
+
+server <- function(input, output) {
+  filtered_data <- reactive({
+    data <- titanic_data %>% 
+      # Filtering by age range
+      filter(Age >= input$age[1] & Age <= input$age[2]) %>%
+      # Make sure the "Survived" column is dealt with as a factor and not numeric 
+      mutate(Survived = as.factor(Survived), Sex = as.factor(Sex))
+
+    # Either filter by a specific passenger class otherwise just keep them all
+    if (input$pclass != "All") {
+      data <- data %>% filter(Pclass == input$pclass)
+    }
+    data
+  })
+  
+  output$survivalPlot <- renderPlot({
+    # Plot the bar chart and fill in the bars based on Sex (either Female or Male)
+    ggplot(filtered_data(), aes(x = Survived, fill = Sex, group = Sex)) + 
+      geom_bar(position = "dodge") +
+      expand_limits(y=150) + # Keep the scale the same throughout filtering to avoid confusion/memorization for viewers
+      labs(title = "Survival by Gender", x = "Survived", y = "Count") + theme_minimal()
+  })
+  
+  output$agePlot <- renderPlot({
+    # Render the Age Distribution Plot, color the bars based on Survived
+    ggplot(filtered_data(), aes(x = Age, fill = Survived, group = Survived)) +
+      geom_histogram(bins = 30, alpha = 0.6, position = "identity") + 
+      expand_limits(y = 100) + 
+      labs(title = "Age Distribution of Passengers", x = "Age", y = "Count") +  
+      theme_minimal()
+    }) 
+    
+  #render a histogram showing the age distribution of passengers that match the filters set by the user
+    output$summaryTable <- renderDT({
+    filtered_data() %>%  # Use the filtered data based on user inputs
+      select(Name, Age, Sex, Pclass, Survived)  # Select specific columns to display in the table
+  })
+}
+
+shinyApp(ui, server)
+
+```
